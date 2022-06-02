@@ -105,13 +105,13 @@ func page(t *template.Template, cfg *config.Config, page string) error {
 		if err != nil {
 			return fmt.Errorf("build.page: %w", err)
 		}
-		parts := bytes.SplitN(b, []byte("==="), 2)
-		if len(parts) != 2 {
-			return fmt.Errorf(`build.page: maleformed content; must have front matter followed by "==="`)
+		parts := bytes.SplitN(b, []byte("---"), 3)
+		if len(parts) != 3 {
+			return fmt.Errorf(`build.page: maleformed content; must have front matter surrounded by "---"`)
 		}
 		var tmp strings.Builder
 		defs := make(map[string]string)
-		if err := yaml.Unmarshal(parts[0], &defs); err != nil {
+		if err := yaml.Unmarshal(parts[1], &defs); err != nil {
 			return fmt.Errorf("build.page: %w", err)
 		}
 		for k, v := range defs {
@@ -120,7 +120,7 @@ func page(t *template.Template, cfg *config.Config, page string) error {
 			tmp.WriteString("{{ end }}")
 		}
 		var buf bytes.Buffer
-		if err := goldmark.Convert(parts[1], &buf); err != nil {
+		if err := goldmark.Convert(parts[2], &buf); err != nil {
 			return fmt.Errorf("build.page: %w", err)
 		}
 		tmp.WriteString(fmt.Sprintf(`{{ define "body" }}%s{{ end }}`, buf.String()))
