@@ -28,6 +28,6 @@ func New(c *cli.Context) error {
 	if err := utils.WriteFile(path.Join(name, "content", "index.md"), []byte("---\n---\n# Hello, World!\n")); err != nil {
 		return fmt.Errorf("newsite.Create: %w", err)
 	}
-	fmt.Printf("\ncd %s\nforge serve\n\n", name)
+	fmt.Printf("\ncd %s\nforge add-template https://github.com/twharmon/forge-dox\nforge serve\n\n", name)
 	return nil
 }
