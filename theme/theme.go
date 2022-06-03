@@ -47,4 +47,5 @@ func Update(c *cli.Context) error {
 	if err := Add(c); err != nil {
 		return fmt.Errorf("theme.Update: %w", err)
 	}
+	return nil
 }
