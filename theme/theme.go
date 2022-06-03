@@ -39,3 +39,12 @@ func Remove(c *cli.Context) error {
 	}
 	return nil
 }
+
+func Update(c *cli.Context) error {
+	if err := Remove(c); err != nil {
+		return fmt.Errorf("theme.Update: %w", err)
+	}
+	if err := Add(c); err != nil {
+		return fmt.Errorf("theme.Update: %w", err)
+	}
+}

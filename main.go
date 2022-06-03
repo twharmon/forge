@@ -14,7 +14,7 @@ import (
 
 func main() {
 	app := &cli.App{
-		Version: "v0.0.9",
+		Version: "v0.0.11",
 		Name:    "forge",
 		Usage:   "Static site generator",
 		Commands: []*cli.Command{
@@ -30,6 +30,13 @@ func main() {
 				Usage: "Add a theme",
 				Action: func(c *cli.Context) error {
 					return theme.Add(c)
+				},
+			},
+			{
+				Name:  "update-theme",
+				Usage: "Update a theme",
+				Action: func(c *cli.Context) error {
+					return theme.Update(c)
 				},
 			},
 			{
