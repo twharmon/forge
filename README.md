@@ -17,6 +17,7 @@ forge new my-site
 ```
 forge add-theme https://github.com/twharmon/forge-dox
 ```
+Reference the theme's readme for information on how to use it.
 
 ### Start the Development Server
 ```
