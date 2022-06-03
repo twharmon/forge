@@ -1,23 +1,37 @@
 package main
 
 import (
+	"forge/build"
+	"forge/serve"
 	"log"
-	"main/build"
-	"main/serve"
 	"os"
+
+	"github.com/urfave/cli/v2"
 )
 
 func main() {
-	switch os.Args[1] {
-	case "build":
-		if err := build.All(); err != nil {
-			panic(err)
-		}
-	case "serve":
-		if err := serve.Start(); err != nil {
-			panic(err)
-		}
-	default:
-		log.Fatalf("unrecognized command %s", os.Args[1])
+	app := &cli.App{
+		Version: "v0.0.4",
+		Name:    "forge",
+		Usage:   "Static site generator",
+		Commands: []*cli.Command{
+			{
+				Name:  "build",
+				Usage: "Build the site",
+				Action: func(c *cli.Context) error {
+					return build.All()
+				},
+			},
+			{
+				Name:  "serve",
+				Usage: "Start the development server",
+				Action: func(c *cli.Context) error {
+					return serve.Start()
+				},
+			},
+		},
+	}
+	if err := app.Run(os.Args); err != nil {
+		log.Fatal(err)
 	}
 }

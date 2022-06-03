@@ -2,10 +2,10 @@ package serve
 
 import (
 	"fmt"
+	"forge/build"
+	"forge/config"
 	"io/ioutil"
 	"log"
-	"main/build"
-	"main/config"
 	"net/http"
 	"os"
 	"os/exec"

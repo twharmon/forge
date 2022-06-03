@@ -3,9 +3,9 @@ package build
 import (
 	"bytes"
 	"fmt"
+	"forge/config"
+	"forge/utils"
 	"io/ioutil"
-	"main/config"
-	"main/utils"
 	"os"
 	"path"
 	"strings"
@@ -100,6 +100,7 @@ func page(t *template.Template, cfg *config.Config, page string) error {
 	if err != nil {
 		return fmt.Errorf("build.page: %w", err)
 	}
+	pageParams := make(map[string]interface{})
 	if strings.HasSuffix(page, ".md") {
 		b, err := ioutil.ReadFile(page)
 		if err != nil {
@@ -109,22 +110,14 @@ func page(t *template.Template, cfg *config.Config, page string) error {
 		if len(parts) != 3 {
 			return fmt.Errorf(`build.page: maleformed content; must have front matter surrounded by "---"`)
 		}
-		var tmp strings.Builder
-		defs := make(map[string]string)
-		if err := yaml.Unmarshal(parts[1], &defs); err != nil {
+		if err := yaml.Unmarshal(parts[1], &pageParams); err != nil {
 			return fmt.Errorf("build.page: %w", err)
-		}
-		for k, v := range defs {
-			tmp.WriteString(fmt.Sprintf(`{{ define "%s" }}`, k))
-			tmp.WriteString(v)
-			tmp.WriteString("{{ end }}")
 		}
 		var buf bytes.Buffer
 		if err := goldmark.Convert(parts[2], &buf); err != nil {
 			return fmt.Errorf("build.page: %w", err)
 		}
-		tmp.WriteString(fmt.Sprintf(`{{ define "body" }}%s{{ end }}`, buf.String()))
-		t, err = t.Parse(tmp.String())
+		t, err = t.Parse(fmt.Sprintf(`{{ define "body" }}%s{{ end }}`, buf.String()))
 		if err != nil {
 			return fmt.Errorf("build.page: %w", err)
 		}
@@ -136,7 +129,11 @@ func page(t *template.Template, cfg *config.Config, page string) error {
 	} else {
 		return fmt.Errorf("build.page: invalid content: %s", page)
 	}
-	if err := t.Execute(f, cfg); err != nil {
+	if err := t.Execute(f, map[string]interface{}{
+		"Theme": cfg.ThemeParams,
+		"Page":  pageParams,
+		"Forge": cfg.Forge,
+	}); err != nil {
 		return fmt.Errorf("build.page: %w", err)
 	}
 	return nil
