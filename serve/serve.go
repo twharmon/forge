@@ -2,8 +2,6 @@ package serve
 
 import (
 	"fmt"
-	"forge/build"
-	"forge/config"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -12,6 +10,9 @@ import (
 	"path"
 	"runtime"
 	"sync"
+
+	"github.com/twharmon/forge/build"
+	"github.com/twharmon/forge/config"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/gorilla/websocket"

@@ -3,14 +3,15 @@ package build
 import (
 	"bytes"
 	"fmt"
-	"forge/config"
-	"forge/utils"
 	"io/ioutil"
 	"os"
 	"path"
 	"strings"
 	"text/template"
 	"time"
+
+	"github.com/twharmon/forge/config"
+	"github.com/twharmon/forge/utils"
 
 	"github.com/yuin/goldmark"
 	"gopkg.in/yaml.v3"
