@@ -30,7 +30,7 @@ func CopyDirectory(scrDir, dest string) error {
 
 		switch fileInfo.Mode() & os.ModeType {
 		case os.ModeDir:
-			if err := createIfNotExists(destPath, 0755); err != nil {
+			if err := Mkdir(destPath); err != nil {
 				return err
 			}
 			if err := CopyDirectory(sourcePath, destPath); err != nil {
@@ -82,30 +82,23 @@ func copy(srcFile, dstFile string) error {
 	return nil
 }
 
-func exists(filePath string) bool {
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		return false
-	}
-
-	return true
-}
-
-func createIfNotExists(dir string, perm os.FileMode) error {
-	if exists(dir) {
-		return nil
-	}
-
-	if err := os.MkdirAll(dir, perm); err != nil {
-		return fmt.Errorf("failed to create directory: '%s', error: '%s'", dir, err.Error())
-	}
-
-	return nil
-}
-
 func copySymLink(source, dest string) error {
 	link, err := os.Readlink(source)
 	if err != nil {
 		return err
 	}
 	return os.Symlink(link, dest)
+}
+
+func Mkdir(dirs ...string) error {
+	for _, dir := range dirs {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("utils.Mkdir: %w", err)
+		}
+	}
+	return nil
+}
+
+func WriteFile(path string, data []byte) error {
+	return ioutil.WriteFile(path, data, 0755)
 }

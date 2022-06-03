@@ -37,7 +37,7 @@ func All() error {
 	if err := os.RemoveAll("build"); err != nil {
 		return fmt.Errorf("build.All: %w", err)
 	}
-	if err := os.Mkdir("build", 0777); err != nil {
+	if err := utils.Mkdir("build"); err != nil {
 		return fmt.Errorf("build.All: %w", err)
 	}
 	if err := utils.CopyDirectory("public", "build"); err != nil {
@@ -89,7 +89,7 @@ func page(t *template.Template, cfg *config.Config, page string) error {
 		pageDir = path.Join(pageDir, nameParts[0])
 		pageName = "index.html"
 	}
-	if err := os.MkdirAll(pageDir, 0777); err != nil {
+	if err := utils.Mkdir(pageDir); err != nil {
 		return fmt.Errorf("build.page: %w", err)
 	}
 	f, err := os.Create(path.Join(pageDir, strings.ReplaceAll(pageName, ".md", ".html")))

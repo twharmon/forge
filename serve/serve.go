@@ -85,6 +85,9 @@ func Start() error {
 	})
 	http.HandleFunc("/", handler)
 	port := fmt.Sprintf(":%d", cfg.Port)
+	if port == ":0" {
+		port = ":8000"
+	}
 	url := fmt.Sprintf("http://localhost%s", port)
 	fmt.Printf("Listening on %s...\n\n", url)
 	go openbrowser(url)
