@@ -5,7 +5,7 @@ Forge is an experimental static site generator. Expect frequent breaking changes
 
 ### Install Forge
 ```
-go install github.com/twharmon/goforge@latest
+go install github.com/twharmon/forge@latest
 ```
 
 ### Create a New Site
