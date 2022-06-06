@@ -1,5 +1,5 @@
 # Forge
-Static site generator
+Forge is an experimental static site generator. Expect frequent breaking changes.
 
 ## Getting Started
 

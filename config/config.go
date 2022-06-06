@@ -8,14 +8,22 @@ import (
 )
 
 type Config struct {
-	ThemeParams map[string]interface{} `yaml:"ThemeParams"`
-	Theme       string                 `yaml:"Theme"`
-	Port        int                    `yaml:"Port"`
-	Forge       struct {
-		Path  string
+	Theme struct {
+		Name   string                 `yaml:"Name"`
+		Params map[string]interface{} `yaml:"Params"`
+	} `yaml:"Theme"`
+
+	Markdown struct {
+		Extensions []string `yaml:"Extensions"`
+	} `yaml:"Markdown"`
+
+	DevServer struct {
+		Port int `yaml:"Port"`
+	} `yaml:"DevServer"`
+
+	Forge struct {
 		Debug bool
 	}
-	Page map[string]interface{}
 }
 
 func Get() (*Config, error) {

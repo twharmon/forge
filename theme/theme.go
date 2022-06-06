@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strings"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/urfave/cli/v2"
 )
 
 func Add(c *cli.Context) error {
-	themeName := path.Base(c.Args().First())
+	themeName := getThemeName(c.Args().First())
 	themePath := path.Join("themes", themeName)
 	if _, err := os.Stat(themePath); err == nil {
 		return fmt.Errorf("theme %s already added", themeName)
@@ -29,7 +30,7 @@ func Add(c *cli.Context) error {
 }
 
 func Remove(c *cli.Context) error {
-	themeName := path.Base(c.Args().First())
+	themeName := getThemeName(c.Args().First())
 	themePath := path.Join("themes", themeName)
 	if _, err := os.Stat(themePath); err != nil {
 		return fmt.Errorf("theme %s not found", themeName)
@@ -48,4 +49,9 @@ func Update(c *cli.Context) error {
 		return fmt.Errorf("theme.Update: %w", err)
 	}
 	return nil
+}
+
+func getThemeName(url string) string {
+	base := path.Base(url)
+	return strings.TrimSuffix(base, ".git")
 }

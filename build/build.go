@@ -11,77 +11,71 @@ import (
 	"time"
 
 	"github.com/twharmon/forge/config"
+	"github.com/twharmon/forge/parser"
 	"github.com/twharmon/forge/utils"
 
-	"github.com/yuin/goldmark"
 	"gopkg.in/yaml.v3"
 )
 
-type statistics struct {
-	start   time.Time
-	pageCnt int
-}
-
-func (s *statistics) Print() {
-	fmt.Printf("%d pages built in %dms\n\n", s.pageCnt, time.Since(s.start).Milliseconds())
-}
-
 func All() error {
-	stats := &statistics{
-		start: time.Now(),
-	}
+	start := time.Now()
 	cfg, err := config.Get()
 	if err != nil {
 		return fmt.Errorf("build.All: %w", err)
 	}
+	prsr := parser.New(parser.Config{
+		Extensions: cfg.Markdown.Extensions,
+		Minify:     !cfg.Forge.Debug,
+	})
 	if err := os.RemoveAll("build"); err != nil {
 		return fmt.Errorf("build.All: %w", err)
 	}
 	if err := utils.Mkdir("build"); err != nil {
 		return fmt.Errorf("build.All: %w", err)
 	}
-	if err := utils.CopyDirectory("public", "build"); err != nil {
+	if cfg.Forge.Debug {
+		if err := utils.WriteFile(path.Join("build", "debug.js"), debugJS); err != nil {
+			return fmt.Errorf("build.All: %w", err)
+		}
+	}
+	if err := prsr.CopyDirectory("public", "build"); err != nil {
 		return err
 	}
-	if err := utils.CopyDirectory(path.Join("themes", cfg.Theme, "public"), "build"); err != nil {
+	if err := prsr.CopyDirectory(path.Join("themes", cfg.Theme.Name, "public"), "build"); err != nil {
 		return err
 	}
-	t, err := template.ParseFiles(path.Join("themes", cfg.Theme, "layouts", "base.html"))
+	t := template.New("base.html")
+	t, err = t.ParseGlob(path.Join("themes", cfg.Theme.Name, "layouts/*"))
 	if err != nil {
 		return fmt.Errorf("build.All: %w", err)
 	}
-	t, err = t.ParseGlob(path.Join("themes", cfg.Theme, "layouts/*"))
-	if err != nil {
-		return fmt.Errorf("build.All: %w", err)
-	}
-	if err := dir(t, cfg, stats, "content"); err != nil {
+	if err := dir(t, cfg, prsr, "content"); err != nil {
 		return err
 	}
-	stats.Print()
+	fmt.Printf("build completed in %s\n\n", time.Since(start).Round(time.Microsecond*100))
 	return nil
 }
 
-func dir(t *template.Template, cfg *config.Config, stats *statistics, dirName string) error {
+func dir(t *template.Template, cfg *config.Config, prsr *parser.Parser, dirName string) error {
 	fis, err := ioutil.ReadDir(dirName)
 	if err != nil {
 		return fmt.Errorf("build.dir: %w", err)
 	}
 	for _, fi := range fis {
 		if fi.IsDir() {
-			if err := dir(t, cfg, stats, path.Join(dirName, fi.Name())); err != nil {
+			if err := dir(t, cfg, prsr, path.Join(dirName, fi.Name())); err != nil {
 				return fmt.Errorf("build.dir: %w", err)
 			}
 			continue
 		}
-		stats.pageCnt++
-		if err := page(t, cfg, path.Join(dirName, fi.Name())); err != nil {
+		if err := page(t, cfg, prsr, path.Join(dirName, fi.Name())); err != nil {
 			return fmt.Errorf("build.dir: %w", err)
 		}
 	}
 	return nil
 }
 
-func page(t *template.Template, cfg *config.Config, page string) error {
+func page(t *template.Template, cfg *config.Config, prsr *parser.Parser, page string) error {
 	pagePath := "build/" + strings.TrimPrefix(page, "content/")
 	pageDir, pageName := path.Split(pagePath)
 	if !strings.HasPrefix(pageName, "index.") {
@@ -96,7 +90,7 @@ func page(t *template.Template, cfg *config.Config, page string) error {
 	if err != nil {
 		return fmt.Errorf("build.page: %w", err)
 	}
-	cfg.Forge.Path = strings.TrimPrefix(pageDir, "build")
+	pathname := strings.TrimPrefix(pageDir, "build")
 	t, err = t.Clone()
 	if err != nil {
 		return fmt.Errorf("build.page: %w", err)
@@ -108,14 +102,18 @@ func page(t *template.Template, cfg *config.Config, page string) error {
 			return fmt.Errorf("build.page: %w", err)
 		}
 		parts := bytes.SplitN(b, []byte("---"), 3)
-		if len(parts) != 3 {
-			return fmt.Errorf(`build.page: maleformed content; must have front matter surrounded by "---"`)
+		if len(parts) != 3 && len(parts) != 1 {
+			return fmt.Errorf(`build.page: maleformed content; front matter must be surrounded by "---"`)
 		}
-		if err := yaml.Unmarshal(parts[1], &pageParams); err != nil {
-			return fmt.Errorf("build.page: %w", err)
+		body := parts[0]
+		if len(parts) == 3 {
+			body = parts[2]
+			if err := yaml.Unmarshal(parts[1], &pageParams); err != nil {
+				return fmt.Errorf("build.page: %w", err)
+			}
 		}
 		var buf bytes.Buffer
-		if err := goldmark.Convert(parts[2], &buf); err != nil {
+		if err := prsr.Markdown(body, &buf); err != nil {
 			return fmt.Errorf("build.page: %w", err)
 		}
 		t, err = t.Parse(fmt.Sprintf(`{{ define "body" }}%s{{ end }}`, buf.String()))
@@ -130,12 +128,28 @@ func page(t *template.Template, cfg *config.Config, page string) error {
 	} else {
 		return fmt.Errorf("build.page: invalid content: %s", page)
 	}
-	if err := t.Execute(f, map[string]interface{}{
-		"Theme": cfg.ThemeParams,
-		"Page":  pageParams,
-		"Forge": cfg.Forge,
-	}); err != nil {
-		return fmt.Errorf("build.page: %w", err)
+	data := map[string]interface{}{
+		"Theme":    cfg.Theme.Params,
+		"Page":     pageParams,
+		"Forge":    cfg.Forge,
+		"Pathname": pathname,
+	}
+	if cfg.Forge.Debug {
+		if err := t.Execute(f, data); err != nil {
+			return fmt.Errorf("build.page: %w", err)
+		}
+	} else {
+		var buf bytes.Buffer
+		if err := t.Execute(&buf, data); err != nil {
+			return fmt.Errorf("build.page: %w", err)
+		}
+		if err := prsr.Minify("text/html", f, &buf); err != nil {
+			return fmt.Errorf("build.page: %w", err)
+		}
 	}
 	return nil
 }
+
+var debugJS = []byte(`// generated by Forge for hot reloading
+new WebSocket('ws://' + window.location.host + '/hot').onmessage = e => e.data === 'reload' && window.location.reload()
+`)

@@ -84,7 +84,7 @@ func Start() error {
 		mu.Unlock()
 	})
 	http.HandleFunc("/", handler)
-	port := fmt.Sprintf(":%d", cfg.Port)
+	port := fmt.Sprintf(":%d", cfg.DevServer.Port)
 	if port == ":0" {
 		port = ":8000"
 	}
@@ -111,7 +111,7 @@ func openbrowser(url string) {
 		return
 	}
 	if err != nil {
-		fmt.Println(err)
+		fmt.Printf("server.openbrowser: %s\n", err)
 	}
 }
 
@@ -125,7 +125,7 @@ func watchAll(w *fsnotify.Watcher, cfg *config.Config) error {
 	if err := watch(w, "public"); err != nil {
 		return fmt.Errorf("serve.watchAll: %w", err)
 	}
-	if err := watch(w, path.Join("themes", cfg.Theme)); err != nil {
+	if err := watch(w, path.Join("themes", cfg.Theme.Name)); err != nil {
 		return fmt.Errorf("serve.watchAll: %w", err)
 	}
 	return nil
