@@ -3,24 +3,21 @@ package theme
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path"
 	"strings"
 
-	"github.com/go-git/go-git/v5"
 	"github.com/urfave/cli/v2"
 )
 
 func Add(c *cli.Context) error {
-	themeName := getThemeName(c.Args().First())
+	themeUrl := c.Args().First()
+	themeName := getThemeName(themeUrl)
 	themePath := path.Join("themes", themeName)
 	if _, err := os.Stat(themePath); err == nil {
 		return fmt.Errorf("theme %s already added", themeName)
 	}
-	_, err := git.PlainClone(themePath, false, &git.CloneOptions{
-		URL:   c.Args().First(),
-		Depth: 1,
-	})
-	if err != nil {
+	if err := exec.Command("git", "clone", themeUrl, themePath, "--depth=1").Run(); err != nil {
 		return fmt.Errorf("theme.Add: %w", err)
 	}
 	if err := os.RemoveAll(path.Join(themePath, ".git")); err != nil {

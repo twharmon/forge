@@ -14,7 +14,7 @@ import (
 
 func main() {
 	app := &cli.App{
-		Version: "v0.0.13",
+		Version: "v0.0.14",
 		Name:    "forge",
 		Usage:   "Static site generator",
 		Commands: []*cli.Command{
