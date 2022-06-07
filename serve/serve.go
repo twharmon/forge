@@ -21,7 +21,11 @@ import (
 
 func Start() error {
 	os.Setenv("DEBUG", "true")
-	if err := build.All(); err != nil {
+	b, err := build.New()
+	if err != nil {
+		fmt.Printf("serve.hot: %s\n", err)
+	}
+	if err := b.Run(); err != nil {
 		fmt.Printf("serve.hot: %s\n", err)
 	}
 	var mu sync.Mutex
@@ -47,7 +51,11 @@ func Start() error {
 				}
 				if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove) > 0 {
 					fmt.Println("change detected:", event.Name)
-					if err := build.All(); err != nil {
+					b, err := build.New()
+					if err != nil {
+						fmt.Printf("serve.hot: %s\n", err)
+					}
+					if err := b.Run(); err != nil {
 						fmt.Printf("serve.hot: %s\n", err)
 					} else {
 						mu.Lock()

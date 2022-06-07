@@ -14,7 +14,7 @@ import (
 
 func main() {
 	app := &cli.App{
-		Version: "v0.0.14",
+		Version: "v0.0.15",
 		Name:    "forge",
 		Usage:   "Static site generator",
 		Commands: []*cli.Command{
@@ -57,7 +57,11 @@ func main() {
 				Name:  "build",
 				Usage: "Build the site",
 				Action: func(c *cli.Context) error {
-					return build.All()
+					b, err := build.New()
+					if err != nil {
+						return err
+					}
+					return b.Run()
 				},
 			},
 		},
