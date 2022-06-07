@@ -3,79 +3,258 @@ package build
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
+	"syscall"
 	"text/template"
 	"time"
 
+	"github.com/tdewolff/minify/v2"
+	"github.com/tdewolff/minify/v2/css"
+	"github.com/tdewolff/minify/v2/html"
+	"github.com/tdewolff/minify/v2/js"
 	"github.com/twharmon/forge/config"
-	"github.com/twharmon/forge/parser"
 	"github.com/twharmon/forge/utils"
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/extension"
 
 	"gopkg.in/yaml.v3"
 )
 
-func All() error {
+type Build struct {
+	start    time.Time
+	cfg      *config.Config
+	markdown goldmark.Markdown
+	minify   *minify.M
+	template *template.Template
+}
+
+func New() (*Build, error) {
 	start := time.Now()
 	cfg, err := config.Get()
 	if err != nil {
-		return fmt.Errorf("build.All: %w", err)
+		return nil, fmt.Errorf("build.New: %w", err)
 	}
-	prsr := parser.New(parser.Config{
-		Extensions: cfg.Markdown.Extensions,
-		Minify:     !cfg.Forge.Debug,
-	})
-	if err := os.RemoveAll("build"); err != nil {
-		return fmt.Errorf("build.All: %w", err)
-	}
-	if err := utils.Mkdir("build"); err != nil {
-		return fmt.Errorf("build.All: %w", err)
-	}
-	if cfg.Forge.Debug {
-		if err := utils.WriteFile(path.Join("build", "debug.js"), debugJS); err != nil {
-			return fmt.Errorf("build.All: %w", err)
+	var exts []goldmark.Extender
+	for _, ext := range cfg.Markdown.Extensions {
+		switch ext {
+		case "footnote":
+			exts = append(exts, extension.Footnote)
+		case "linkify":
+			exts = append(exts, extension.NewLinkify(extension.WithLinkifyAllowedProtocols([][]byte{[]byte("https:")})))
+		default:
+			fmt.Printf("warning: ignoring unknown extension %s\n", ext)
 		}
-	}
-	if err := prsr.CopyDirectory("public", "build"); err != nil {
-		return err
-	}
-	if err := prsr.CopyDirectory(path.Join("themes", cfg.Theme.Name, "public"), "build"); err != nil {
-		return err
 	}
 	t := template.New("base.html")
 	t, err = t.ParseGlob(path.Join("themes", cfg.Theme.Name, "layouts/*"))
 	if err != nil {
-		return fmt.Errorf("build.All: %w", err)
+		return nil, fmt.Errorf("build.New: %w", err)
 	}
-	if err := dir(t, cfg, prsr, "content"); err != nil {
+	b := &Build{
+		cfg:      cfg,
+		start:    start,
+		markdown: goldmark.New(goldmark.WithExtensions(exts...)),
+		template: t,
+	}
+	if !cfg.Forge.Debug {
+		b.minify = minify.New()
+		b.minify.AddFunc("text/css", css.Minify)
+		b.minify.AddFunc("text/html", html.Minify)
+		b.minify.AddFunc("application/javascript", js.Minify)
+	}
+	return b, nil
+}
+
+func (b *Build) Run() error {
+	if err := os.RemoveAll("build"); err != nil {
+		return fmt.Errorf("build.Run: %w", err)
+	}
+	if err := utils.Mkdir("build"); err != nil {
+		return fmt.Errorf("build.Run: %w", err)
+	}
+	if b.cfg.Forge.Debug {
+		if err := utils.WriteFile(path.Join("build", "debug.js"), debugJS); err != nil {
+			return fmt.Errorf("build.All: %w", err)
+		}
+	}
+	if err := b.processPublicDir(path.Join("themes", b.cfg.Theme.Name, "public"), "build"); err != nil {
 		return err
 	}
-	fmt.Printf("build completed in %s\n\n", time.Since(start).Round(time.Microsecond*100))
+	if err := b.processPublicDir("public", "build"); err != nil {
+		return err
+	}
+	if err := b.buildContentDir("content"); err != nil {
+		return err
+	}
+	b.report()
 	return nil
 }
 
-func dir(t *template.Template, cfg *config.Config, prsr *parser.Parser, dirName string) error {
+func (b *Build) report() {
+	dur := time.Since(b.start).Round(time.Microsecond * 100)
+	fmt.Printf("build completed in %s\n\n", dur)
+}
+
+func (b *Build) processPublicDir(src string, dest string) error {
+	entries, err := ioutil.ReadDir(src)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		sourcePath := filepath.Join(src, entry.Name())
+		destPath := filepath.Join(dest, entry.Name())
+		fileInfo, err := os.Stat(sourcePath)
+		if err != nil {
+			return err
+		}
+		stat, ok := fileInfo.Sys().(*syscall.Stat_t)
+		if !ok {
+			return fmt.Errorf("failed to get raw syscall.Stat_t data for '%s'", sourcePath)
+		}
+		switch fileInfo.Mode() & os.ModeType {
+		case os.ModeDir:
+			if err := utils.Mkdir(destPath); err != nil {
+				return err
+			}
+			if err := b.processPublicDir(sourcePath, destPath); err != nil {
+				return err
+			}
+		default:
+			if err := b.processPublicFile(sourcePath, destPath); err != nil {
+				return err
+			}
+		}
+		if err := os.Lchown(destPath, int(stat.Uid), int(stat.Gid)); err != nil {
+			return err
+		}
+		isSymlink := entry.Mode()&os.ModeSymlink != 0
+		if !isSymlink {
+			if err := os.Chmod(destPath, entry.Mode()); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (b *Build) processPublicFile(srcFile string, dstFile string) error {
+	out, err := os.Create(dstFile)
+	if err != nil {
+		return fmt.Errorf("build.processPublicFile: %w", err)
+	}
+	defer out.Close()
+	var buf bytes.Buffer
+	if err := b.execTmpl(srcFile, &buf); err != nil {
+		return fmt.Errorf("build.processPublicFile: %w", err)
+	}
+	if err := b.minifyFile(srcFile, out, &buf); err != nil {
+		return fmt.Errorf("build.processPublicFile: %w", err)
+	}
+	return nil
+}
+
+func (b *Build) execTmpl(srcFile string, w io.Writer) error {
+	var err error
+	switch path.Ext(srcFile) {
+	case ".css", ".html", ".js":
+		var t *template.Template
+		t, err = template.ParseFiles(srcFile)
+		if err != nil {
+			return fmt.Errorf("build.execTmpl: %w", err)
+		}
+		err = t.Execute(w, map[string]interface{}{"Theme": b.cfg.Theme.Params})
+	default:
+		src, err := os.Open(srcFile)
+		if err != nil {
+			return fmt.Errorf("build.execTmpl: %w", err)
+		}
+		_, err = io.Copy(w, src)
+	}
+	if err != nil {
+		return fmt.Errorf("build.execTmpl: %w", err)
+	}
+	return nil
+}
+
+func (b *Build) minifyFile(srcFile string, w io.Writer, r io.Reader) error {
+	if b.cfg.Forge.Debug {
+		_, err := io.Copy(w, r)
+		if err != nil {
+			return fmt.Errorf("build.minifyFile: %w", err)
+		}
+		return nil
+	}
+	var err error
+	switch path.Ext(srcFile) {
+	case ".css":
+		err = b.minify.Minify("text/css", w, r)
+	case ".html":
+		err = b.minify.Minify("text/html", w, r)
+	case ".js":
+		err = b.minify.Minify("application/javascript", w, r)
+	default:
+		_, err = io.Copy(w, r)
+	}
+	if err != nil {
+		return fmt.Errorf("build.minifyFile: %w", err)
+	}
+	return nil
+}
+
+func (b *Build) execTmplAndMinify(contentType string, w io.Writer, file string) error {
+	t, err := template.ParseFiles(file)
+	if err != nil {
+		return fmt.Errorf("build.execTmplAndMinify: %w", err)
+	}
+	var buf bytes.Buffer
+	if err := t.Execute(&buf, map[string]interface{}{"Theme": b.cfg.Theme.Params}); err != nil {
+		return fmt.Errorf("build.execTmplAndMinify: %w", err)
+	}
+	if b.cfg.Forge.Debug {
+		_, err = io.Copy(w, &buf)
+	} else {
+		switch contentType {
+		case ".css":
+			err = b.minify.Minify("text/css", w, &buf)
+		case ".html":
+			err = b.minify.Minify("text/html", w, &buf)
+		case ".js":
+			err = b.minify.Minify("application/javascript", w, &buf)
+		default:
+			_, err = io.Copy(w, &buf)
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("build.execTmplAndMinify: %w", err)
+	}
+	return nil
+}
+
+func (b *Build) buildContentDir(dirName string) error {
 	fis, err := ioutil.ReadDir(dirName)
 	if err != nil {
 		return fmt.Errorf("build.dir: %w", err)
 	}
 	for _, fi := range fis {
 		if fi.IsDir() {
-			if err := dir(t, cfg, prsr, path.Join(dirName, fi.Name())); err != nil {
+			if err := b.buildContentDir(path.Join(dirName, fi.Name())); err != nil {
 				return fmt.Errorf("build.dir: %w", err)
 			}
 			continue
 		}
-		if err := page(t, cfg, prsr, path.Join(dirName, fi.Name())); err != nil {
+		if err := b.buildContentPage(path.Join(dirName, fi.Name())); err != nil {
 			return fmt.Errorf("build.dir: %w", err)
 		}
 	}
 	return nil
 }
 
-func page(t *template.Template, cfg *config.Config, prsr *parser.Parser, page string) error {
+func (b *Build) buildContentPage(page string) error {
 	pagePath := "build/" + strings.TrimPrefix(page, "content/")
 	pageDir, pageName := path.Split(pagePath)
 	if !strings.HasPrefix(pageName, "index.") {
@@ -91,17 +270,17 @@ func page(t *template.Template, cfg *config.Config, prsr *parser.Parser, page st
 		return fmt.Errorf("build.page: %w", err)
 	}
 	pathname := strings.TrimPrefix(pageDir, "build")
-	t, err = t.Clone()
+	t, err := b.template.Clone()
 	if err != nil {
 		return fmt.Errorf("build.page: %w", err)
 	}
 	pageParams := make(map[string]interface{})
 	if strings.HasSuffix(page, ".md") {
-		b, err := ioutil.ReadFile(page)
+		pageContents, err := ioutil.ReadFile(page)
 		if err != nil {
 			return fmt.Errorf("build.page: %w", err)
 		}
-		parts := bytes.SplitN(b, []byte("---"), 3)
+		parts := bytes.SplitN(pageContents, []byte("---"), 3)
 		if len(parts) != 3 && len(parts) != 1 {
 			return fmt.Errorf(`build.page: maleformed content; front matter must be surrounded by "---"`)
 		}
@@ -113,7 +292,7 @@ func page(t *template.Template, cfg *config.Config, prsr *parser.Parser, page st
 			}
 		}
 		var buf bytes.Buffer
-		if err := prsr.Markdown(body, &buf); err != nil {
+		if err := b.markdown.Convert(body, &buf); err != nil {
 			return fmt.Errorf("build.page: %w", err)
 		}
 		t, err = t.Parse(fmt.Sprintf(`{{ define "body" }}%s{{ end }}`, buf.String()))
@@ -129,12 +308,12 @@ func page(t *template.Template, cfg *config.Config, prsr *parser.Parser, page st
 		return fmt.Errorf("build.page: invalid content: %s", page)
 	}
 	data := map[string]interface{}{
-		"Theme":    cfg.Theme.Params,
+		"Theme":    b.cfg.Theme.Params,
 		"Page":     pageParams,
-		"Forge":    cfg.Forge,
+		"Forge":    b.cfg.Forge,
 		"Pathname": pathname,
 	}
-	if cfg.Forge.Debug {
+	if b.cfg.Forge.Debug {
 		if err := t.Execute(f, data); err != nil {
 			return fmt.Errorf("build.page: %w", err)
 		}
@@ -143,7 +322,7 @@ func page(t *template.Template, cfg *config.Config, prsr *parser.Parser, page st
 		if err := t.Execute(&buf, data); err != nil {
 			return fmt.Errorf("build.page: %w", err)
 		}
-		if err := prsr.Minify("text/html", f, &buf); err != nil {
+		if err := b.minify.Minify("text/html", f, &buf); err != nil {
 			return fmt.Errorf("build.page: %w", err)
 		}
 	}
