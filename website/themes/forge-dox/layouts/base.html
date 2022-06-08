@@ -25,7 +25,12 @@
     <div class="brand">
       <a href="/">
       {{ if .Theme.SiteLogo }}
-        <img src="{{ .Theme.SiteLogo }}" alt="brand">
+        <img
+          src="{{ .Theme.SiteLogo }}"
+          alt="brand"
+          width="36"
+          height="36"
+        >
       {{ end }}
       <span>
         {{ .Theme.SiteName }}
