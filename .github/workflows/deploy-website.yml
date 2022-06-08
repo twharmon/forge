@@ -1,0 +1,47 @@
+name: Deploy website
+on:
+  push:
+    branches:
+      - main
+jobs:
+  deploy:
+    name: Deploy website to AWS
+    strategy:
+      matrix:
+        go-version: [1.18]
+        platform: [ubuntu-latest]
+    runs-on: ${{ matrix.platform }}
+    steps:
+    - name: Install Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: ${{ matrix.go-version }}
+    - name: Checkout
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+    - name: Configure AWS credentials
+      id: creds
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+    - name: Deploy to AWS CloudFormation
+      uses: aws-actions/aws-cloudformation-github-deploy@v1
+      with:
+        name: forge-website
+        template: ./website/template.yml
+        no-fail-on-empty-changeset: "1"
+    - name: Install Forge
+      run: go install github.com/twharmon/forge@v0.0.15
+    - name: Build
+      working-directory: ./website
+      run: forge build
+    - name: Upload to S3
+      run: |
+        aws s3 sync ./website/build s3://goforge.org --delete --acl public-read
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        AWS_DEFAULT_REGION: us-east-1
