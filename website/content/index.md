@@ -1,9 +1,5 @@
----
-title: Forge
----
+# Static Site Generation Made Easy
 
-# Forge
-
-Static site generator.
+Forge aims to be performant and easy to use.
 
 [Getting Started](/docs/getting-started)
