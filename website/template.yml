@@ -19,7 +19,7 @@ Resources:
   DNSRecord:
     Type: AWS::Route53::RecordSetGroup
     Properties:
-      HostedZoneId: Z03909421E29KPDXISMOG
+      HostedZoneId: Z02401571EPAVAYUQUEOJ
       RecordSets:
       - Name: goforge.org
         Type: A
@@ -54,7 +54,7 @@ Resources:
       DomainName: goforge.org
       ValidationMethod: DNS
       DomainValidationOptions:
-        - HostedZoneId: Z03909421E29KPDXISMOG
+        - HostedZoneId: Z02401571EPAVAYUQUEOJ
           DomainName: goforge.org
   WWWCertificate:
     Type: AWS::CertificateManager::Certificate
@@ -62,7 +62,7 @@ Resources:
       DomainName: www.goforge.org
       ValidationMethod: DNS
       DomainValidationOptions:
-        - HostedZoneId: Z03909421E29KPDXISMOG
+        - HostedZoneId: Z02401571EPAVAYUQUEOJ
           DomainName: www.goforge.org
   Distribution:
     Type: AWS::CloudFront::Distribution
