@@ -1,0 +1,13 @@
+{{ define "aside" }}
+  <div class="aside">
+    <ul>
+      {{ range $link := index .Theme.Menu .Page.aside }}
+        <li>
+          <a href="{{ $link.Url }}"{{ if eq $link.Url $.Pathname }} class="active"{{ end }}>
+            {{ $link.Name }}
+          </a>
+        </li>
+      {{ end }}
+    </ul>
+  </div>
+{{ end }}

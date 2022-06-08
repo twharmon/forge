@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ if .Page.title }}{{ .Page.title }} | {{ end }}{{ .Theme.SiteName }}</title>
+  {{ if .Forge.Debug }}
+    <script src="/debug.js"></script>
+  {{ end }}
+  {{ if .Theme.Favicon }}
+    <link rel="icon" type="image/x-icon" href="{{ .Theme.Favicon }}">
+  {{ end }}
+  <link rel="stylesheet" href="/main.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300&display=swap" rel="stylesheet">
+  {{ if .Theme.CodeSyntax }}
+    <link rel="stylesheet" href="/prismjs-theme.css">
+    <script src="https://unpkg.com/prismjs@v1.x/components/prism-core.min.js"></script>
+    <script src="https://unpkg.com/prismjs@v1.x/plugins/autoloader/prism-autoloader.min.js"></script>
+  {{ end }}
+</head>
+<body>
+  <nav>
+    <div class="brand">
+      <a href="/">
+      {{ if .Theme.SiteLogo }}
+        <img src="{{ .Theme.SiteLogo }}" alt="brand">
+      {{ end }}
+      <span>
+        {{ .Theme.SiteName }}
+      </span>
+      </a>
+    </div>
+    <ul>
+      {{ if .Theme.Menu.Main }}
+        {{ range $link := .Theme.Menu.Main }}
+          <li>
+            <a href="{{ $link.Url }}">
+              {{ $link.Name }}
+            </a>
+          </li>
+        {{ end }}
+      {{ end }}
+    </ul>
+  </nav>
+  <div class="content">
+    {{ if .Page.aside }}
+      {{ template "aside" . }}
+    {{ end }}
+    <div class="body">
+      {{ block "body" . }}{{ end }}
+    </div>
+  </div>
+</body>
+</html>

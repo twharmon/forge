@@ -1,0 +1,28 @@
+DevServer:
+  Port: 8000
+
+Markdown:
+  Extensions:
+    - footnote
+    - linkify
+Theme:
+  Name: forge-dox
+  Params:
+    SiteName: Forge
+    SiteLogo: /anvil-light.png
+    Favicon: /anvil-light.png
+    CodeSyntax: true
+    Menu:
+      Main:
+        - Name: Introduction
+          Url: /
+        - Name: Docs
+          Url: /docs/getting-started
+        - Name: Github
+          Url: https://github.com/twharmon/forge
+      Docs:
+        - Name: Getting Started
+          Url: /docs/getting-started
+        - Name: Themes
+          Url: /docs/themes
+
