@@ -1,0 +1,116 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Resources:
+  Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: goforge.org
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+  WWWBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: www.goforge.org
+      WebsiteConfiguration:
+        RedirectAllRequestsTo:
+          HostName: goforge.org
+          Protocol: https
+  DNSRecord:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneId: Z03909421E29KPDXISMOG
+      RecordSets:
+      - Name: goforge.org
+        Type: A
+        AliasTarget:
+          DNSName: !GetAtt Distribution.DomainName
+          HostedZoneId: Z2FDTNDATAQYW2
+      - Name: www.goforge.org
+        Type: A
+        AliasTarget:
+          DNSName: !GetAtt WWWDistribution.DomainName
+          HostedZoneId: Z2FDTNDATAQYW2
+  AggressiveCachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Properties: 
+      CachePolicyConfig: 
+        DefaultTTL: 86400
+        MaxTTL: 86400
+        MinTTL: 86400
+        Name: goforge-cache-policy
+        ParametersInCacheKeyAndForwardedToOrigin: 
+          CookiesConfig: 
+            CookieBehavior: none
+          EnableAcceptEncodingBrotli: true
+          EnableAcceptEncodingGzip: true
+          HeadersConfig: 
+            HeaderBehavior: none
+          QueryStringsConfig: 
+            QueryStringBehavior: none
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: goforge.org
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - HostedZoneId: Z03909421E29KPDXISMOG
+          DomainName: goforge.org
+  WWWCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: www.goforge.org
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - HostedZoneId: Z03909421E29KPDXISMOG
+          DomainName: www.goforge.org
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Origins:
+          - DomainName: !Select [2, !Split ['/', !GetAtt Bucket.WebsiteURL]]
+            Id: S3Origin
+            CustomOriginConfig:
+              HTTPPort: '80'
+              HTTPSPort: '443'
+              OriginProtocolPolicy: http-only
+        Aliases:
+          - goforge.org
+        Enabled: true
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - GET
+            - HEAD
+          Compress: true
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          CachePolicyId: !GetAtt AggressiveCachePolicy.Id
+        ViewerCertificate:
+          AcmCertificateArn: !Ref Certificate
+          SslSupportMethod: sni-only
+  WWWDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Origins:
+          - DomainName: !Select [2, !Split ['/', !GetAtt WWWBucket.WebsiteURL]]
+            Id: S3Origin
+            CustomOriginConfig:
+              HTTPPort: '80'
+              HTTPSPort: '443'
+              OriginProtocolPolicy: http-only
+        Aliases:
+          - www.goforge.org
+        Enabled: true
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - GET
+            - HEAD
+          Compress: true
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad # Disabled
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+        ViewerCertificate:
+          AcmCertificateArn: !Ref WWWCertificate
+          SslSupportMethod: sni-only
