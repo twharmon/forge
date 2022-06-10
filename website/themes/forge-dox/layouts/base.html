@@ -4,9 +4,6 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ if .Page.title }}{{ .Page.title }} | {{ end }}{{ .Theme.SiteName }}</title>
-  {{ if .Forge.Debug }}
-    <script src="/debug.js"></script>
-  {{ end }}
   {{ if .Theme.Favicon }}
     <link rel="icon" type="image/x-icon" href="{{ .Theme.Favicon }}">
   {{ end }}

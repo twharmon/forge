@@ -211,35 +211,6 @@ func (b *Build) minifyFile(srcFile string, w io.Writer, r io.Reader) error {
 	return nil
 }
 
-func (b *Build) execTmplAndMinify(contentType string, w io.Writer, file string) error {
-	t, err := template.ParseFiles(file)
-	if err != nil {
-		return fmt.Errorf("build.execTmplAndMinify: %w", err)
-	}
-	var buf bytes.Buffer
-	if err := t.Execute(&buf, map[string]interface{}{"Theme": b.cfg.Theme.Params}); err != nil {
-		return fmt.Errorf("build.execTmplAndMinify: %w", err)
-	}
-	if b.cfg.Forge.Debug {
-		_, err = io.Copy(w, &buf)
-	} else {
-		switch contentType {
-		case ".css":
-			err = b.minify.Minify("text/css", w, &buf)
-		case ".html":
-			err = b.minify.Minify("text/html", w, &buf)
-		case ".js":
-			err = b.minify.Minify("application/javascript", w, &buf)
-		default:
-			_, err = io.Copy(w, &buf)
-		}
-	}
-	if err != nil {
-		return fmt.Errorf("build.execTmplAndMinify: %w", err)
-	}
-	return nil
-}
-
 func (b *Build) buildContentDir(dirName string) error {
 	fis, err := ioutil.ReadDir(dirName)
 	if err != nil {
@@ -315,13 +286,16 @@ func (b *Build) buildContentPage(page string) error {
 	data := map[string]interface{}{
 		"Theme":    b.cfg.Theme.Params,
 		"Page":     pageParams,
-		"Forge":    b.cfg.Forge,
 		"Pathname": pathname,
 	}
 	if b.cfg.Forge.Debug {
-		if err := t.Execute(f, data); err != nil {
+		var buf bytes.Buffer
+		if err := t.Execute(&buf, data); err != nil {
 			return fmt.Errorf("build.buildContentPage: %w", err)
 		}
+		b := buf.Bytes()
+		b = bytes.Replace(b, []byte("</head>"), []byte(`<script src="/debug.js"></script></head>`), 1)
+		io.Copy(f, bytes.NewBuffer(b))
 	} else {
 		var buf bytes.Buffer
 		if err := t.Execute(&buf, data); err != nil {
@@ -349,10 +323,4 @@ ws.onmessage = e => {
 ws.onopen = () => ws.send('loaded')
 `)
 
-var indexHTML = []byte(`
-<html>
-<head>
-<script src="/debug.js"></script>
-</head>
-</html>
-`)
+var indexHTML = []byte(`<html><head><script src="/debug.js"></script></head></html>`)
