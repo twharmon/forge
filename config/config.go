@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 
@@ -39,4 +40,15 @@ func Get() (*Config, error) {
 		config.Forge.Debug = true
 	}
 	return &config, nil
+}
+
+func (c *Config) DevServerPort() string {
+	if c.DevServer.Port == 0 {
+		return ":8000"
+	}
+	return fmt.Sprintf(":%d", c.DevServer.Port)
+}
+
+func (c *Config) DevServerUrl() string {
+	return fmt.Sprintf("http://localhost%s", c.DevServerPort())
 }

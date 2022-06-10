@@ -139,8 +139,12 @@ li {
     margin-bottom: 10px;
 }
 
-ul, p, pre {
+pre {
     margin-bottom: 30px !important;
+}
+
+ul, p {
+    margin-bottom: 30px;
 }
 
 code {

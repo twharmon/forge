@@ -35,6 +35,7 @@ type Build struct {
 
 func New() (*Build, error) {
 	start := time.Now()
+	fmt.Println("Loading config...")
 	cfg, err := config.Get()
 	if err != nil {
 		return nil, fmt.Errorf("build.New: %w", err)
@@ -50,6 +51,7 @@ func New() (*Build, error) {
 			fmt.Printf("warning: ignoring unknown extension %s\n", ext)
 		}
 	}
+	fmt.Println("Parsing templates...")
 	t := template.New("base.html")
 	t, err = t.ParseGlob(path.Join("themes", cfg.Theme.Name, "layouts/*"))
 	if err != nil {
@@ -78,39 +80,42 @@ func (b *Build) Run() error {
 		return fmt.Errorf("build.Run: %w", err)
 	}
 	if b.cfg.Forge.Debug {
+		fmt.Println("Generating debug assets...")
+		if err := utils.WriteFile(path.Join("build", "index.html"), indexHTML); err != nil {
+			return fmt.Errorf("build.All: %w", err)
+		}
 		if err := utils.WriteFile(path.Join("build", "debug.js"), debugJS); err != nil {
 			return fmt.Errorf("build.All: %w", err)
 		}
 	}
+	fmt.Println("Processing public directory...")
 	if err := b.processPublicDir(path.Join("themes", b.cfg.Theme.Name, "public"), "build"); err != nil {
-		return err
+		return fmt.Errorf("build.Run: %w", err)
 	}
 	if err := b.processPublicDir("public", "build"); err != nil {
-		return err
+		return fmt.Errorf("build.Run: %w", err)
 	}
+	fmt.Println("Generating content...")
 	if err := b.buildContentDir("content"); err != nil {
-		return err
+		return fmt.Errorf("build.Run: %w", err)
 	}
-	b.report()
-	return nil
-}
-
-func (b *Build) report() {
 	dur := time.Since(b.start).Round(time.Microsecond * 100)
-	fmt.Printf("build completed in %s\n\n", dur)
+	fmt.Println("-------------------------------")
+	fmt.Printf("Build completed in %s\n\n", dur)
+	return nil
 }
 
 func (b *Build) processPublicDir(src string, dest string) error {
 	entries, err := ioutil.ReadDir(src)
 	if err != nil {
-		return err
+		return fmt.Errorf("build.processPublicDir: %w", err)
 	}
 	for _, entry := range entries {
 		sourcePath := filepath.Join(src, entry.Name())
 		destPath := filepath.Join(dest, entry.Name())
 		fileInfo, err := os.Stat(sourcePath)
 		if err != nil {
-			return err
+			return fmt.Errorf("build.processPublicDir: %w", err)
 		}
 		stat, ok := fileInfo.Sys().(*syscall.Stat_t)
 		if !ok {
@@ -119,23 +124,23 @@ func (b *Build) processPublicDir(src string, dest string) error {
 		switch fileInfo.Mode() & os.ModeType {
 		case os.ModeDir:
 			if err := utils.Mkdir(destPath); err != nil {
-				return err
+				return fmt.Errorf("build.processPublicDir: %w", err)
 			}
 			if err := b.processPublicDir(sourcePath, destPath); err != nil {
-				return err
+				return fmt.Errorf("build.processPublicDir: %w", err)
 			}
 		default:
 			if err := b.processPublicFile(sourcePath, destPath); err != nil {
-				return err
+				return fmt.Errorf("build.processPublicDir: %w", err)
 			}
 		}
 		if err := os.Lchown(destPath, int(stat.Uid), int(stat.Gid)); err != nil {
-			return err
+			return fmt.Errorf("build.processPublicDir: %w", err)
 		}
 		isSymlink := entry.Mode()&os.ModeSymlink != 0
 		if !isSymlink {
 			if err := os.Chmod(destPath, entry.Mode()); err != nil {
-				return err
+				return fmt.Errorf("build.processPublicDir: %w", err)
 			}
 		}
 	}
@@ -238,17 +243,17 @@ func (b *Build) execTmplAndMinify(contentType string, w io.Writer, file string) 
 func (b *Build) buildContentDir(dirName string) error {
 	fis, err := ioutil.ReadDir(dirName)
 	if err != nil {
-		return fmt.Errorf("build.dir: %w", err)
+		return fmt.Errorf("build.buildContentDir: %w", err)
 	}
 	for _, fi := range fis {
 		if fi.IsDir() {
 			if err := b.buildContentDir(path.Join(dirName, fi.Name())); err != nil {
-				return fmt.Errorf("build.dir: %w", err)
+				return fmt.Errorf("build.buildContentDir: %w", err)
 			}
 			continue
 		}
 		if err := b.buildContentPage(path.Join(dirName, fi.Name())); err != nil {
-			return fmt.Errorf("build.dir: %w", err)
+			return fmt.Errorf("build.buildContentDir: %w", err)
 		}
 	}
 	return nil
@@ -263,16 +268,16 @@ func (b *Build) buildContentPage(page string) error {
 		pageName = "index.html"
 	}
 	if err := utils.Mkdir(pageDir); err != nil {
-		return fmt.Errorf("build.page: %w", err)
+		return fmt.Errorf("build.buildContentPage: %w", err)
 	}
 	f, err := os.Create(path.Join(pageDir, strings.ReplaceAll(pageName, ".md", ".html")))
 	if err != nil {
-		return fmt.Errorf("build.page: %w", err)
+		return fmt.Errorf("build.buildContentPage: %w", err)
 	}
 	pathname := strings.TrimPrefix(pageDir, "build")
 	t, err := b.template.Clone()
 	if err != nil {
-		return fmt.Errorf("build.page: %w", err)
+		return fmt.Errorf("build.buildContentPage: %w", err)
 	}
 	pageParams := make(map[string]interface{})
 	if strings.HasSuffix(page, ".md") {
@@ -282,27 +287,27 @@ func (b *Build) buildContentPage(page string) error {
 		}
 		parts := bytes.SplitN(pageContents, []byte("---"), 3)
 		if len(parts) != 3 && len(parts) != 1 {
-			return fmt.Errorf(`build.page: maleformed content; front matter must be surrounded by "---"`)
+			return fmt.Errorf(`build.buildContentPage: maleformed content; front matter must be surrounded by "---"`)
 		}
 		body := parts[0]
 		if len(parts) == 3 {
 			body = parts[2]
 			if err := yaml.Unmarshal(parts[1], &pageParams); err != nil {
-				return fmt.Errorf("build.page: %w", err)
+				return fmt.Errorf("build.buildContentPage: %w", err)
 			}
 		}
 		var buf bytes.Buffer
 		if err := b.markdown.Convert(body, &buf); err != nil {
-			return fmt.Errorf("build.page: %w", err)
+			return fmt.Errorf("build.buildContentPage: %w", err)
 		}
 		t, err = t.Parse(fmt.Sprintf(`{{ define "body" }}%s{{ end }}`, buf.String()))
 		if err != nil {
-			return fmt.Errorf("build.page: %w", err)
+			return fmt.Errorf("build.buildContentPage: %w", err)
 		}
 	} else if strings.HasSuffix(page, ".html") {
 		t, err = t.ParseFiles(page)
 		if err != nil {
-			return fmt.Errorf("build.page: %w", err)
+			return fmt.Errorf("build.buildContentPage: %w", err)
 		}
 	} else {
 		return fmt.Errorf("build.page: invalid content: %s", page)
@@ -315,20 +320,39 @@ func (b *Build) buildContentPage(page string) error {
 	}
 	if b.cfg.Forge.Debug {
 		if err := t.Execute(f, data); err != nil {
-			return fmt.Errorf("build.page: %w", err)
+			return fmt.Errorf("build.buildContentPage: %w", err)
 		}
 	} else {
 		var buf bytes.Buffer
 		if err := t.Execute(&buf, data); err != nil {
-			return fmt.Errorf("build.page: %w", err)
+			return fmt.Errorf("build.buildContentPage: %w", err)
 		}
 		if err := b.minify.Minify("text/html", f, &buf); err != nil {
-			return fmt.Errorf("build.page: %w", err)
+			return fmt.Errorf("build.buildContentPage: %w", err)
 		}
 	}
 	return nil
 }
 
-var debugJS = []byte(`// generated by Forge for hot reloading
-new WebSocket('ws://' + window.location.host + '/hot').onmessage = e => e.data === 'reload' && window.location.reload()
+var debugJS = []byte(`
+const ws = new WebSocket('ws://' + window.location.host + '/hot')
+ws.onmessage = e => {
+	if (e.data === 'reload') return window.location.reload()
+	const overlay = document.createElement('div')
+	overlay.style = 'position: fixed; left: 0; right: 0; top: 0; bottom: 0; background: #000c; color: #e77; font-size: 18px'
+	const msg = document.createElement('div')
+	msg.style = 'width: 100%; max-width: 600px; margin: auto; margin-top: 5vh; line-height: 200%; padding: 0 20px;'
+	msg.innerText = e.data
+	overlay.appendChild(msg)
+	document.body.appendChild(overlay)
+}
+ws.onopen = () => ws.send('loaded')
+`)
+
+var indexHTML = []byte(`
+<html>
+<head>
+<script src="/debug.js"></script>
+</head>
+</html>
 `)
